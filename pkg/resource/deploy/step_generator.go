@@ -19,8 +19,8 @@ import (
 
 	"github.com/pulumi/pulumi/pkg/diag"
 	"github.com/pulumi/pulumi/pkg/resource"
+	"github.com/pulumi/pulumi/pkg/resource/deploy/providers"
 	"github.com/pulumi/pulumi/pkg/resource/plugin"
-	"github.com/pulumi/pulumi/pkg/tokens"
 	"github.com/pulumi/pulumi/pkg/util/contract"
 	"github.com/pulumi/pulumi/pkg/util/logging"
 )
@@ -30,8 +30,8 @@ import (
 // and calculating the appropriate step action based on the requested goal
 // state and the existing state of the world.
 type stepGenerator struct {
-	plan *Plan   // the plan to which this step generator belongs
-	opts Options // options for this step generator
+	plan *Plan                    // the plan to which this step generator belongs
+	opts Options                  // options for this step generator
 
 	urns     map[resource.URN]bool // set of URNs discovered for this plan
 	deletes  map[resource.URN]bool // set of URNs deleted in this plan
@@ -52,7 +52,7 @@ func (sg *stepGenerator) GenerateSteps(event RegisterResourceEvent) ([]Step, err
 
 	goal := event.Goal()
 	// generate an URN for this new resource.
-	urn := sg.generateURN(event)
+	urn := sg.plan.generateURN(goal)
 	if sg.urns[urn] {
 		invalid = true
 		// TODO[pulumi/pulumi-framework#19]: improve this error message!
@@ -76,8 +76,19 @@ func (sg *stepGenerator) GenerateSteps(event RegisterResourceEvent) ([]Step, err
 	var prov plugin.Provider
 	var err error
 	if goal.Custom {
-		if prov, err = sg.provider(goal.Type); err != nil {
-			return nil, err
+		if providers.IsProviderType(goal.Type) {
+			prov = sg.plan.providers
+		} else {
+			contract.Assert(goal.Provider != "")
+			ref, err := providers.ParseReference(goal.Provider)
+			if err != nil {
+				return nil, errors.Errorf("bad provider reference '%v' for resource '%v'", goal.Provider, urn)
+			}
+			p, ok := sg.plan.GetProvider(ref)
+			if !ok {
+				return nil, errors.Errorf("unknown provider '%v' for resource '%v'", ref, urn)
+			}
+			prov = p
 		}
 	}
 
@@ -92,7 +103,7 @@ func (sg *stepGenerator) GenerateSteps(event RegisterResourceEvent) ([]Step, err
 
 	// If this isn't a refresh, ensure the provider is okay with this resource and fetch the inputs to pass to
 	// subsequent methods.  If these are not inputs, we are just going to blindly store the outputs, so skip this.
-	if prov != nil && !refresh {
+	if prov != nil && (!refresh || providers.IsProviderType(goal.Type)) {
 		var failures []plugin.CheckFailure
 
 		// If we are re-creating this resource because it was deleted earlier, the old inputs are now
@@ -405,21 +416,8 @@ func (sg *stepGenerator) getResourcePropertyStates(urn resource.URN, goal *resou
 	}
 	return props, inputs, outputs,
 		resource.NewState(goal.Type, urn, goal.Custom, false, "",
-			inputs, outputs, goal.Parent, goal.Protect, goal.Dependencies, []string{})
+			inputs, outputs, goal.Parent, goal.Protect, goal.Dependencies, nil, goal.Provider)
 
-}
-
-func (sg *stepGenerator) generateURN(e RegisterResourceEvent) resource.URN {
-	// Use the resource goal state name to produce a globally unique URN.
-
-	goal := e.Goal()
-	parentType := tokens.Type("")
-	if p := goal.Parent; p != "" && p.Type() != resource.RootStackType {
-		// Skip empty parents and don't use the root stack type; otherwise, use the full qualified type.
-		parentType = p.QualifiedType()
-	}
-
-	return resource.NewURN(sg.plan.Target().Name, sg.plan.source.Project(), parentType, goal.Type, goal.Name)
 }
 
 // issueCheckErrors prints any check errors to the diagnostics sink.
@@ -439,19 +437,6 @@ func (sg *stepGenerator) issueCheckErrors(new *resource.State, urn resource.URN,
 		}
 	}
 	return true
-}
-
-// Provider fetches the provider for a given resource type, possibly lazily allocating the plugins for it.  If a
-// provider could not be found, or an error occurred while creating it, a non-nil error is returned.
-func (sg *stepGenerator) provider(t tokens.Type) (plugin.Provider, error) {
-	pkg := t.Package()
-	prov, err := sg.plan.Provider(pkg)
-	if err != nil {
-		return nil, err
-	} else if prov == nil {
-		return nil, errors.Errorf("could not load resource provider for package '%v' from $PATH", pkg)
-	}
-	return prov, nil
 }
 
 func (sg *stepGenerator) Creates() map[resource.URN]bool  { return sg.creates }

@@ -190,7 +190,7 @@ func DeserializeResource(res apitype.ResourceV1) (*resource.State, error) {
 
 	return resource.NewState(
 		res.Type, res.URN, res.Custom, res.Delete, res.ID, inputs, outputs, res.Parent, res.Protect,
-		res.Dependencies, res.InitErrors), nil
+		res.Dependencies, res.InitErrors, ""), nil
 }
 
 // DeserializeProperties deserializes an entire map of deploy properties into a resource property map.

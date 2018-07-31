@@ -17,9 +17,21 @@ package deploy
 import (
 	"io"
 
+	"github.com/blang/semver"
+
 	"github.com/pulumi/pulumi/pkg/resource"
+	"github.com/pulumi/pulumi/pkg/resource/config"
+	"github.com/pulumi/pulumi/pkg/resource/deploy/providers"
+	"github.com/pulumi/pulumi/pkg/resource/plugin"
 	"github.com/pulumi/pulumi/pkg/tokens"
+	"github.com/pulumi/pulumi/pkg/util/logging"
 )
+
+// A ProviderSource allows a Source to lookup provider plugins.
+type ProviderSource interface {
+	// GetProvider fetches the provider plugin for the given reference.
+	GetProvider(ref providers.Reference) (plugin.Provider, bool)
+}
 
 // A Source can generate a new set of resources that the planner will process accordingly.
 type Source interface {
@@ -33,8 +45,8 @@ type Source interface {
 	// be assumed to reflect existing state, or whether the events should acted upon (false).
 	IsRefresh() bool
 
-	// Iterate begins iterating the source.  Error is non-nil upon failure; otherwise, a valid iterator is returned.
-	Iterate(opts Options) (SourceIterator, error)
+	// Iterate begins iterating the source. Error is non-nil upon failure; otherwise, a valid iterator is returned.
+	Iterate(opts Options, providers ProviderSource) (SourceIterator, error)
 }
 
 // A SourceIterator enumerates the list of resources that a source has to offer and tracks associated state.
@@ -76,4 +88,42 @@ type RegisterResourceOutputsEvent interface {
 	Outputs() resource.PropertyMap
 	// Done indicates that we are done with this step.  It must be called to perform cleanup associated with the step.
 	Done()
+}
+
+// registerDefaultProviderEvent is a special implementation of RegisterResourceEvent intended for registering default
+// providers.
+type registerDefaultProviderEvent struct {
+	goal *resource.Goal
+	done chan<- *RegisterResult
+}
+
+var _ RegisterResourceEvent = (*registerDefaultProviderEvent)(nil)
+
+func newRegisterDefaultProviderEvent(pkg tokens.Package, cfg map[config.Key]string,
+	version *semver.Version, done chan<- *RegisterResult) *registerDefaultProviderEvent {
+
+	inputs := make(resource.PropertyMap)
+	for k, v := range cfg {
+		inputs[resource.PropertyKey(k.Name())] = resource.NewStringProperty(v)
+	}
+	if version != nil {
+		inputs["version"] = resource.NewStringProperty(version.String())
+	}
+
+	t := providers.MakeProviderType(pkg)
+	return &registerDefaultProviderEvent{
+		goal: resource.NewGoal(t, "default", true, inputs, "", false, nil, ""),
+		done: done,
+	}
+}
+
+func (e *registerDefaultProviderEvent) event() {}
+
+func (e *registerDefaultProviderEvent) Goal() *resource.Goal {
+	return e.goal
+}
+
+func (e *registerDefaultProviderEvent) Done(r *RegisterResult) {
+	logging.V(7).Infof("default provider registration complete")
+	e.done <- r
 }
