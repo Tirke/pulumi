@@ -17,10 +17,13 @@ package engine
 import (
 	"time"
 
+	"github.com/blang/semver"
+
 	"github.com/pulumi/pulumi/pkg/diag"
 	"github.com/pulumi/pulumi/pkg/resource"
 	"github.com/pulumi/pulumi/pkg/resource/deploy"
 	"github.com/pulumi/pulumi/pkg/resource/plugin"
+	"github.com/pulumi/pulumi/pkg/tokens"
 	"github.com/pulumi/pulumi/pkg/util/contract"
 	"github.com/pulumi/pulumi/pkg/workspace"
 )
@@ -87,8 +90,18 @@ func newUpdateSource(
 	}
 
 	// Now ensure that we have loaded up any plugins that the program will need in advance.
-	if err = plugctx.Host.EnsurePlugins(plugins, plugin.AllPlugins); err != nil {
+	const kinds = plugin.AnalyzerPlugins | plugin.LanguagePlugins
+	if err = plugctx.Host.EnsurePlugins(plugins, kinds); err != nil {
 		return nil, err
+	}
+
+	// Collect the version information for default providers.
+	defaultProviderVersions := make(map[tokens.Package]*semver.Version)
+	for _, p := range plugins {
+		if p.Kind != workspace.ResourcePlugin {
+			continue
+		}
+		defaultProviderVersions[tokens.Package(p.Name)] = p.Version
 	}
 
 	// If that succeeded, create a new source that will perform interpretation of the compiled program.
@@ -98,7 +111,7 @@ func newUpdateSource(
 		Pwd:     pwd,
 		Program: main,
 		Target:  target,
-	}, dryRun), nil
+	}, defaultProviderVersions, dryRun), nil
 }
 
 func update(ctx *Context, info *planContext, opts planOptions, dryRun bool) (ResourceChanges, error) {
