@@ -29,7 +29,7 @@ const UnknownID = plugin.UnknownStringValue
 
 // IsProviderType returns true if the supplied type token refers to a Pulumi provider.
 func IsProviderType(typ tokens.Type) bool {
-	return typ.Package() == "pulumi" && typ.Module() == "providers" && typ.Name() != ""
+	return typ.Module() == "pulumi:providers" && typ.Name() != ""
 }
 
 // MakeProviderType returns the provider type token for the given package.
@@ -44,11 +44,8 @@ func getProviderPackage(typ tokens.Type) tokens.Package {
 
 func validateURN(urn resource.URN) error {
 	typ := urn.Type()
-	if typ.Package() != "pulumi" {
-		return errors.Errorf("invalid package in type: expected 'pulumi', got '%v'", typ.Package())
-	}
-	if typ.Module() != "providers" {
-		return errors.Errorf("invalid module in type: expected 'providers', got '%v'", typ.Module())
+	if typ.Module() != "pulumi:providers" {
+		return errors.Errorf("invalid module in type: expected 'pulumi:providers', got '%v'", typ.Module())
 	}
 	if typ.Name() == "" {
 		return errors.New("provider URNs must specify a type name")

@@ -15,6 +15,7 @@
 package providers
 
 import (
+	"fmt"
 	"sync"
 
 	"github.com/blang/semver"
@@ -25,6 +26,7 @@ import (
 	"github.com/pulumi/pulumi/pkg/resource/plugin"
 	"github.com/pulumi/pulumi/pkg/tokens"
 	"github.com/pulumi/pulumi/pkg/util/contract"
+	"github.com/pulumi/pulumi/pkg/util/logging"
 	"github.com/pulumi/pulumi/pkg/workspace"
 )
 
@@ -97,6 +99,8 @@ func (r *Registry) GetProvider(ref Reference) (plugin.Provider, bool) {
 	r.m.RLock()
 	defer r.m.RUnlock()
 
+	logging.V(7).Infof("GetProvider(%v)", ref)
+
 	provider, ok := r.providers[ref]
 	return provider, ok
 }
@@ -104,6 +108,8 @@ func (r *Registry) GetProvider(ref Reference) (plugin.Provider, bool) {
 func (r *Registry) setProvider(ref Reference, provider plugin.Provider) {
 	r.m.Lock()
 	defer r.m.Unlock()
+
+	logging.V(7).Infof("setProvider(%v)", ref)
 
 	r.providers[ref] = provider
 }
@@ -128,6 +134,10 @@ func (r *Registry) Pkg() tokens.Package {
 	return "pulumi"
 }
 
+func (r *Registry) label() string {
+	return "ProviderRegistry"
+}
+
 // CheckConfig validates the configuration for this resource provider.
 func (r *Registry) CheckConfig(olds, news resource.PropertyMap) (resource.PropertyMap, []plugin.CheckFailure, error) {
 	contract.Fail()
@@ -149,6 +159,9 @@ func (r *Registry) Check(urn resource.URN, olds, news resource.PropertyMap,
 	allowUnknowns bool) (resource.PropertyMap, []plugin.CheckFailure, error) {
 
 	contract.Require(IsProviderType(urn.Type()), "urn")
+
+	label := fmt.Sprintf("%s.Check(%s)", r.label(), urn)
+	logging.V(7).Infof("%s executing (#olds=%d,#news=%d", label, len(olds), len(news))
 
 	// Parse the version from the provider properties and load the provider.
 	version, err := getProviderVersion(news)
@@ -189,6 +202,9 @@ func (r *Registry) Diff(urn resource.URN, id resource.ID, olds, news resource.Pr
 
 	contract.Require(id != "", "id")
 
+	label := fmt.Sprintf("%s.Diff(%s,%s)", r.label(), urn, id)
+	logging.V(7).Infof("%s: executing (#olds=%d,#news=%d)", label, len(olds), len(news))
+
 	// Create a reference using the URN and the unknown ID and fetch the provider.
 	provider, ok := r.GetProvider(mustNewReference(urn, UnknownID))
 	contract.Assertf(ok, "'Check' must be called before 'Diff'")
@@ -216,6 +232,9 @@ func (r *Registry) Create(urn resource.URN,
 
 	contract.Assert(!r.isPreview)
 
+	label := fmt.Sprintf("%s.Create(%s)", r.label(), urn)
+	logging.V(7).Infof("%s executing (#news=%v)", label, len(news))
+
 	// Fetch the unconfigured provider, configure it, and register it under a new ID.
 	provider, ok := r.GetProvider(mustNewReference(urn, UnknownID))
 	contract.Assertf(ok, "'Check' must be called before 'Create'")
@@ -241,6 +260,9 @@ func (r *Registry) Update(urn resource.URN, id resource.ID, olds,
 	news resource.PropertyMap) (resource.PropertyMap, resource.Status, error) {
 
 	contract.Assert(!r.isPreview)
+
+	label := fmt.Sprintf("%s.Update(%s,%s)", r.label(), id, urn)
+	logging.V(7).Infof("%s executing (#olds=%v,#news=%v)", label, len(olds), len(news))
 
 	// Fetch the unconfigured provider and configure it.
 	provider, ok := r.GetProvider(mustNewReference(urn, id))
