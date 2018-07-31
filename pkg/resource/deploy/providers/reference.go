@@ -29,7 +29,7 @@ type ProviderReference struct {
 
 // String returns the string representation of this provider reference.
 func (p ProviderReference) String() string {
-	return string(urn) + resource.URNNameDelimiter + string(id)
+	return string(p.URN) + resource.URNNameDelimiter + string(p.ID)
 }
 
 // ParseProviderReference parses the URN and ID from the string representation of a provider reference. If parsing was
