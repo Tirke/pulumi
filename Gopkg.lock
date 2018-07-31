@@ -290,6 +290,12 @@
   revision = "362f9845770f1606d61ba3ddf9cfb1f0780d2ffe"
 
 [[projects]]
+  name = "github.com/satori/go.uuid"
+  packages = ["."]
+  revision = "f58768cc1a7a7e77a3bd49e98cdd21419399b6a3"
+  version = "v1.2.0"
+
+[[projects]]
   branch = "master"
   name = "github.com/sergi/go-diff"
   packages = ["diffmatchpatch"]
@@ -555,6 +561,6 @@
 [solve-meta]
   analyzer-name = "dep"
   analyzer-version = 1
-  inputs-digest = "09466a544e10908eeb96ddc4a6cf596a72aec1c36bab6a1f02cf5ac0dfa0986c"
+  inputs-digest = "77cf8370ea3966bedbcb104dbf7bf14660568ba3b0fda6585a7aae1e2c9e94b4"
   solver-name = "gps-cdcl"
   solver-version = 1
