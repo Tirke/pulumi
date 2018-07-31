@@ -162,7 +162,7 @@ func (p *provider) Configure(inputs resource.PropertyMap) error {
 			err = createConfigureError(rpcError)
 		}
 		// Acquire the lock, publish the results, and notify any waiters.
-		p.cfgerr = err
+		p.cfgknown, p.cfgerr = true, err
 		close(p.cfgdone)
 	}()
 
