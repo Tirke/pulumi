@@ -28,6 +28,11 @@ func IsProviderType(typ tokens.Type) bool {
 	return typ.Package() == "pulumi" && typ.Module() == "providers" && typ.Name() != ""
 }
 
+// MakeProviderType returns the provider type token for the given package.
+func MakeProviderType(pkg tokens.Package) tokens.Type {
+	return tokens.Type("pulumi:providers:" + pkg)
+}
+
 func validateURN(urn resource.URN) error {
 	typ := urn.Type()
 	if typ.Package() != "pulumi" {
