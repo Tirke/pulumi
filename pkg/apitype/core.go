@@ -125,6 +125,9 @@ type ResourceV1 struct {
 	// InitErrors is the set of errors encountered in the process of initializing resource (i.e.,
 	// during create or update).
 	InitErrors []string `json:"initErrors" yaml:"initErrors,omitempty"`
+	// Provider is a reference to the provider that is associated with this resource.
+	// TODO(pdg): remove this test-only hack
+	Provider string `json:"provider,omitempty" yaml:"provider,omitempty"`
 }
 
 // ResourceV2 is the second version of the Resource API type. It absorbs a few breaking changes:
