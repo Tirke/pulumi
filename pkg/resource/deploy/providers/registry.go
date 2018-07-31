@@ -15,35 +15,34 @@
 package providers
 
 import (
-	"fmt"
 	"sync"
 
 	"github.com/blang/semver"
+	"github.com/pkg/errors"
 	uuid "github.com/satori/go.uuid"
 
 	"github.com/pulumi/pulumi/pkg/resource"
-	"github.com/pulumi/pulumi/pkg/resource/config"
 	"github.com/pulumi/pulumi/pkg/resource/plugin"
 	"github.com/pulumi/pulumi/pkg/tokens"
 	"github.com/pulumi/pulumi/pkg/util/contract"
-	"github.com/pulumi/pulumi/pkg/util/logging"
+	"github.com/pulumi/pulumi/pkg/workspace"
 )
 
 func getProviderVersion(inputs resource.PropertyMap) (*semver.Version, error) {
-	versionProp, ok := properties["version"]
+	versionProp, ok := inputs["version"]
 	if !ok {
 		return nil, nil
 	}
 
 	if !versionProp.IsString() {
-		return errors.New("'version' must be a string")
+		return nil, errors.New("'version' must be a string")
 	}
 
 	sv, err := semver.ParseTolerant(versionProp.StringValue())
 	if err != nil {
-		return errors.Errorf("could not parse provider version: %v", err)
+		return nil, errors.Errorf("could not parse provider version: %v", err)
 	}
-	return sv, nil
+	return &sv, nil
 }
 
 
@@ -84,17 +83,17 @@ func NewRegistry(host plugin.Host, prev []*resource.State, isPreview bool) (*Reg
 			return nil, errors.Errorf("could not load provider '%v': %v", urn, err)
 		}
 		if err := provider.Configure(res.Inputs); err != nil {
-			closeErr = host.CloseProvider(provider)
+			closeErr := host.CloseProvider(provider)
 			contract.IgnoreError(closeErr)
-			return nil, errors.Errof("could not configure provider '%v': %v", urn, err)
+			return nil, errors.Errorf("could not configure provider '%v': %v", urn, err)
 		}
-		r.providers[mustNewReference(urn, id)] = provider
+		r.providers[mustNewReference(urn, res.ID)] = provider
 	}
 
 	return r, nil
 }
 
-func (r *registry) GetProvider(ref Reference) (plugin.Provider, bool) {
+func (r *Registry) GetProvider(ref Reference) (plugin.Provider, bool) {
 	r.m.RLock()
 	defer r.m.RUnlock()
 
@@ -102,14 +101,14 @@ func (r *registry) GetProvider(ref Reference) (plugin.Provider, bool) {
 	return provider, ok
 }
 
-func (r *registry) setProvider(ref Reference, provider plugin.Provider) {
+func (r *Registry) setProvider(ref Reference, provider plugin.Provider) {
 	r.m.Lock()
 	defer r.m.Unlock()
 
 	r.providers[ref] = provider
 }
 
-func (r *registry) deleteProvider(ref Reference) (plugin.Provider, bool) {
+func (r *Registry) deleteProvider(ref Reference) (plugin.Provider, bool) {
 	r.m.Lock()
 	defer r.m.Unlock()
 
@@ -121,20 +120,32 @@ func (r *registry) deleteProvider(ref Reference) (plugin.Provider, bool) {
 	return provider, true
 }
 
-func (r *registry) Close() error {
+func (r *Registry) Close() error {
 	return nil
 }
 
-func (r *registry) Pkg() tokens.Package {
+func (r *Registry) Pkg() tokens.Package {
 	return "pulumi"
 }
 
-func (r *registry) Configure(props map[config.Key]string) error {
+// CheckConfig validates the configuration for this resource provider.
+func (r *Registry) CheckConfig(olds, news resource.PropertyMap) (resource.PropertyMap, []plugin.CheckFailure, error) {
 	contract.Fail()
-	return errors.New("the metaProvider is not configurable")
+	return nil, nil, errors.New("the provider registry is not configurable")
 }
 
-func (r *registry) Check(urn resource.URN, olds, news resource.PropertyMap,
+// DiffConfig checks what impacts a hypothetical change to this provider's configuration will have on the provider.
+func (r *Registry) DiffConfig(olds, news resource.PropertyMap) (plugin.DiffResult, error) {
+	contract.Fail()
+	return plugin.DiffResult{}, errors.New("the provider registry is not configurable")
+}
+
+func (r *Registry) Configure(props resource.PropertyMap) error {
+	contract.Fail()
+	return errors.New("the provider registry is not configurable")
+}
+
+func (r *Registry) Check(urn resource.URN, olds, news resource.PropertyMap,
 	allowUnknowns bool) (resource.PropertyMap, []plugin.CheckFailure, error) {
 
 	contract.Require(IsProviderType(urn.Type()), "urn")
@@ -142,7 +153,7 @@ func (r *registry) Check(urn resource.URN, olds, news resource.PropertyMap,
 	// Parse the version from the provider properties and load the provider.
 	version, err := getProviderVersion(news)
 	if err != nil {
-		return nil, []plugin.CheckFailure{Property: "version", Reason: err.String()}, nil
+		return nil, []plugin.CheckFailure{{Property: "version", Reason: err.Error()}}, nil
 	}
 	provider, err := r.host.Provider(getProviderPackage(urn.Type()), version)
 	if err != nil {
@@ -173,13 +184,13 @@ func (r *registry) Check(urn resource.URN, olds, news resource.PropertyMap,
 	return inputs, nil, nil
 }
 
-func (r *registry) Diff(urn resource.URN, id resource.ID, olds, news resource.PropertyMap,
+func (r *Registry) Diff(urn resource.URN, id resource.ID, olds, news resource.PropertyMap,
 	allowUnknowns bool) (plugin.DiffResult, error) {
 
 	contract.Require(id != "", "id")
 
 	// Create a reference using the URN and the unknown ID and fetch the provider.
-	provider, ok = r.GetProvider(mustNewReference(urn, UnknownID))
+	provider, ok := r.GetProvider(mustNewReference(urn, UnknownID))
 	contract.Assertf(ok, "'Check' must be called before 'Diff'")
 
 	// Diff the properties.
@@ -200,10 +211,10 @@ func (r *registry) Diff(urn resource.URN, id resource.ID, olds, news resource.Pr
 	return diff, nil
 }
 
-func (r *registry) Create(urn resource.URN,
+func (r *Registry) Create(urn resource.URN,
 	news resource.PropertyMap) (resource.ID, resource.PropertyMap, resource.Status, error) {
 
-	contract.Assert(!isPreview)
+	contract.Assert(!r.isPreview)
 
 	// Fetch the unconfigured provider, configure it, and register it under a new ID.
 	provider, ok := r.GetProvider(mustNewReference(urn, UnknownID))
@@ -213,21 +224,23 @@ func (r *registry) Create(urn resource.URN,
 		return "", nil, resource.StatusOK, err
 	}
 
-	id := uuid.NewV4().String()
+	id := resource.ID(uuid.NewV4().String())
 	contract.Assert(id != UnknownID)
 
 	r.setProvider(mustNewReference(urn, id), provider)
 	return id, resource.PropertyMap{}, resource.StatusOK, nil
 }
 
-func (r *registry) Read(urn resource.URN, id resource.ID,
+func (r *Registry) Read(urn resource.URN, id resource.ID,
 	props resource.PropertyMap) (resource.PropertyMap, error) {
 	contract.Fail()
 	return nil, errors.New("providers may not be read")
 }
 
-func (r *registry) Update(urn resource.URN, id resource.ID, olds,
+func (r *Registry) Update(urn resource.URN, id resource.ID, olds,
 	news resource.PropertyMap) (resource.PropertyMap, resource.Status, error) {
+
+	contract.Assert(!r.isPreview)
 
 	// Fetch the unconfigured provider and configure it.
 	provider, ok := r.GetProvider(mustNewReference(urn, id))
@@ -240,7 +253,9 @@ func (r *registry) Update(urn resource.URN, id resource.ID, olds,
 	return resource.PropertyMap{}, resource.StatusOK, nil
 }
 
-func (r *registry) Delete(urn resource.URN, id resource.ID, props resource.PropertyMap) (resource.Status, error) {
+func (r *Registry) Delete(urn resource.URN, id resource.ID, props resource.PropertyMap) (resource.Status, error) {
+	contract.Assert(!r.isPreview)
+
 	ref := mustNewReference(urn, id)
 	provider, ok := r.deleteProvider(ref)
 	if !ok {
@@ -251,19 +266,19 @@ func (r *registry) Delete(urn resource.URN, id resource.ID, props resource.Prope
 	return resource.StatusOK, nil
 }
 
-func (r *registry) Invoke(tok tokens.ModuleMember,
+func (r *Registry) Invoke(tok tokens.ModuleMember,
 	args resource.PropertyMap) (resource.PropertyMap, []plugin.CheckFailure, error) {
 	contract.Fail()
-	return nil, nil, errors.New("the metaProvider is not invokeable")
+	return nil, nil, errors.New("the provider registry is not invokeable")
 }
 
-func (r *registry) GetPluginInfo() (workspace.PluginInfo, error) {
-	// return an error: this should not be called for the metaProvider
+func (r *Registry) GetPluginInfo() (workspace.PluginInfo, error) {
+	// return an error: this should not be called for the provider registry
 	contract.Fail()
-	return workspace.PluginInfo{}, errors.New("the metaProvider does not report plugin info")
+	return workspace.PluginInfo{}, errors.New("the provider registry does not report plugin info")
 }
 
-func (r *registry) SignalCancellation() error {
+func (r *Registry) SignalCancellation() error {
 	// TODO: this should probably cancel any outstanding load requests and return
 	return nil
 }

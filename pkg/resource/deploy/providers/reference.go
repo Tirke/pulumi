@@ -22,6 +22,7 @@ import (
 	"github.com/pulumi/pulumi/pkg/resource"
 	"github.com/pulumi/pulumi/pkg/resource/plugin"
 	"github.com/pulumi/pulumi/pkg/tokens"
+	"github.com/pulumi/pulumi/pkg/util/contract"
 )
 
 const UnknownID = plugin.UnknownStringValue
@@ -89,6 +90,7 @@ func mustNewReference(urn resource.URN, id resource.ID) Reference {
 	ref, err := NewReference(urn, id)
 	contract.Assert(err == nil)
 	return ref
+}
 
 // ParseReference parses the URN and ID from the string representation of a provider reference. If parsing was
 // not possible, this function returns false.
