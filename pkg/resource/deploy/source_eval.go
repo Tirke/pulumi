@@ -264,7 +264,12 @@ func (d *defaultProviders) serve() {
 
 			logging.V(5).Infof("registered default provider for package %s: %s", req.pkg, result.State.URN)
 
-			ref, err := providers.NewReference(result.State.URN, result.State.ID)
+			id := result.State.ID
+			if id == "" {
+				id = providers.UnknownID
+			}
+
+			ref, err = providers.NewReference(result.State.URN, id)
 			contract.Assert(err == nil)
 			d.providers[req.pkg] = ref
 		}
@@ -487,7 +492,7 @@ func (rm *resmon) RegisterResource(ctx context.Context,
 	protect := req.GetProtect()
 
 	provider := req.GetProvider()
-	if !providers.IsProviderType(t) && provider == "" {
+	if custom && !providers.IsProviderType(t) && provider == "" {
 		ref, err := rm.defaultProviders.getDefaultProviderRef(t.Package())
 		if err != nil {
 			return nil, err

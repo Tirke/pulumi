@@ -54,7 +54,7 @@ func NewSameStep(plan *Plan, reg RegisterResourceEvent, old *resource.State, new
 	contract.Assert(old != nil)
 	contract.Assert(old.URN != "")
 	contract.Assert(old.ID != "" || !old.Custom)
-	contract.Assert(!old.Custom || old.Provider != "" || old.Type.Package() == "pulumi-providers")
+	contract.Assert(!old.Custom || old.Provider != "" || providers.IsProviderType(old.Type))
 	contract.Assert(!old.Delete)
 	contract.Assert(new != nil)
 	contract.Assert(new.URN != "")
@@ -105,7 +105,7 @@ func NewCreateStep(plan *Plan, reg RegisterResourceEvent, new *resource.State) S
 	contract.Assert(new != nil)
 	contract.Assert(new.URN != "")
 	contract.Assert(new.ID == "")
-	contract.Assert(!new.Custom || new.Provider != "" || new.Type.Package() == "pulumi-providers")
+	contract.Assert(!new.Custom || new.Provider != "" || providers.IsProviderType(new.Type))
 	contract.Assert(!new.Delete)
 	return &CreateStep{
 		plan: plan,
@@ -124,7 +124,7 @@ func NewCreateReplacementStep(plan *Plan, reg RegisterResourceEvent,
 	contract.Assert(new != nil)
 	contract.Assert(new.URN != "")
 	contract.Assert(new.ID == "")
-	contract.Assert(!new.Custom || new.Provider != "" || new.Type.Package() == "pulumi-providers")
+	contract.Assert(!new.Custom || new.Provider != "" || providers.IsProviderType(new.Type))
 	contract.Assert(!new.Delete)
 	contract.Assert(old.Type == new.Type)
 	return &CreateStep{
@@ -207,7 +207,7 @@ func NewDeleteStep(plan *Plan, old *resource.State) Step {
 	contract.Assert(old != nil)
 	contract.Assert(old.URN != "")
 	contract.Assert(old.ID != "" || !old.Custom)
-	contract.Assert(!old.Custom || old.Provider != "" || old.Type.Package() == "pulumi-providers")
+	contract.Assert(!old.Custom || old.Provider != "" || providers.IsProviderType(old.Type))
 	contract.Assert(!old.Delete)
 	return &DeleteStep{
 		plan: plan,
@@ -219,7 +219,7 @@ func NewDeleteReplacementStep(plan *Plan, old *resource.State, pendingDelete boo
 	contract.Assert(old != nil)
 	contract.Assert(old.URN != "")
 	contract.Assert(old.ID != "" || !old.Custom)
-	contract.Assert(!old.Custom || old.Provider != "" || old.Type.Package() == "pulumi-providers")
+	contract.Assert(!old.Custom || old.Provider != "" || providers.IsProviderType(old.Type))
 	contract.Assert(!pendingDelete || old.Delete)
 	return &DeleteStep{
 		plan:      plan,
@@ -282,7 +282,7 @@ func NewUpdateStep(plan *Plan, reg RegisterResourceEvent, old *resource.State,
 	contract.Assert(old != nil)
 	contract.Assert(old.URN != "")
 	contract.Assert(old.ID != "" || !old.Custom)
-	contract.Assert(!old.Custom || old.Provider != "" || old.Type.Package() == "pulumi-providers")
+	contract.Assert(!old.Custom || old.Provider != "" || providers.IsProviderType(old.Type))
 	contract.Assert(!old.Delete)
 	contract.Assert(new != nil)
 	contract.Assert(new.URN != "")
