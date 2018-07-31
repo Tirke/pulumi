@@ -58,7 +58,7 @@ func (r *registry) RegisterProvider(urn resource.URN, properties resource.Proper
 	defer r.m.Unlock()
 
 	if err := validateURN(urn); err != nil {
-		return Reference{}, nil, nilm err
+		return Reference{}, nil, nil, err
 	}
 
 	id, provider, failures, err := loadProvider(r.host, urn, properties, allowUnknowns)

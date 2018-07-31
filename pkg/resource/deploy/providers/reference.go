@@ -51,7 +51,7 @@ type Reference struct {
 
 // String returns the string representation of this provider reference.
 func (p Reference) String() string {
-	return string(p.URN) + resource.URNNameDelimiter + string(p.ID)
+	return string(p.urn) + resource.URNNameDelimiter + string(p.id)
 }
 
 // NewReference creates a new reference for the given URN and ID.
@@ -69,7 +69,7 @@ func ParseReference(s string) (Reference, error) {
 	// of the reference.
 	lastSep := strings.LastIndex(s, resource.URNNameDelimiter)
 	if lastSep == -1 {
-		return Reference{}, errors.New("expected '%v' in provider reference '%v'", resource.URNNameDelimiter, s)
+		return Reference{}, errors.Errorf("expected '%v' in provider reference '%v'", resource.URNNameDelimiter, s)
 	}
 	urn, id := resource.URN(s[:lastSep]), resource.ID(s[lastSep+len(resource.URNNameDelimiter):])
 	if err := validateURN(urn); err != nil {
