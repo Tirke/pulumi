@@ -26,7 +26,6 @@ import (
 	"google.golang.org/grpc/codes"
 
 	"github.com/pulumi/pulumi/pkg/resource"
-	"github.com/pulumi/pulumi/pkg/resource/config"
 	"github.com/pulumi/pulumi/pkg/tokens"
 	"github.com/pulumi/pulumi/pkg/util/contract"
 	"github.com/pulumi/pulumi/pkg/util/logging"
@@ -86,13 +85,13 @@ func (p *provider) label() string {
 // CheckConfig validates the configuration for this resource provider.
 func (p *provider) CheckConfig(olds, news resource.PropertyMap) (resource.PropertyMap, []CheckFailure, error) {
 	// Ensure that all config values are strings or unknowns.
-	var failures []plugin.CheckFailure
+	var failures []CheckFailure
 	for k, v := range news {
 		if !v.IsString() && !v.IsComputed() {
-			failures = append(failures, plugin.CheckFailure{
+			failures = append(failures, CheckFailure{
 				Property: k,
 				Reason:   "provider property values must be strings",
-			}
+			})
 		}
 	}
 	if len(failures) != 0 {
@@ -128,7 +127,7 @@ func (p *provider) ensureConfigured() error {
 // Configure configures the resource provider with "globals" that control its behavior.
 func (p *provider) Configure(inputs resource.PropertyMap) error {
 	label := fmt.Sprintf("%s.Configure()", p.label())
-	logging.V(7).Infof("%s executing (#vars=%d)", label, len(vars))
+	logging.V(7).Infof("%s executing (#vars=%d)", label, len(inputs))
 
 	// Convert the inputs to a config map. If any are unknown, do not configure the underlying plugin: instead, leavce
 	// the cfgknown bit unset and carry on.
@@ -145,7 +144,7 @@ func (p *provider) Configure(inputs resource.PropertyMap) error {
 		case v.IsString():
 			// Pass the older spelling of a configuration key across the RPC interface, for now, to support
 			// providers which are on the older plan.
-			config[p.Pkg()+":config:"+k] = v.StringValue()
+			config[string(p.Pkg())+":config:"+string(k)] = v.StringValue()
 		default:
 			p.cfgerr = errors.Errorf("provider property values must be strings; '%v' is a %v", k, v.TypeString())
 			close(p.cfgdone)
@@ -244,13 +243,13 @@ func (p *provider) Diff(urn resource.URN, id resource.ID,
 	// Get the RPC client and ensure it's configured.
 	client, err := p.getClient()
 	if err != nil {
-		return nil, nil, err
+		return DiffResult{}, err
 	}
 
 	// If the configuration for this provider was not fully known--e.g. if we are doing a preview and some input
 	// property was sourced from another resource's output properties--don't call into the underlying provider.
 	if !p.cfgknown {
-		return news, nil, nil
+		return DiffResult{Changes: DiffUnknown}, nil
 	}
 
 	molds, err := MarshalProperties(olds, MarshalOptions{
@@ -526,7 +525,7 @@ func (p *provider) Invoke(tok tokens.ModuleMember, args resource.PropertyMap) (r
 	// Get the RPC client and ensure it's configured.
 	client, err := p.getClient()
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 
 	// If the provider is not fully configured, return an empty property map.
@@ -535,12 +534,6 @@ func (p *provider) Invoke(tok tokens.ModuleMember, args resource.PropertyMap) (r
 	}
 
 	margs, err := MarshalProperties(args, MarshalOptions{Label: fmt.Sprintf("%s.args", label)})
-	if err != nil {
-		return nil, nil, err
-	}
-
-	// Get the RPC client and ensure it's configured.
-	client, err := p.getClient()
 	if err != nil {
 		return nil, nil, err
 	}
