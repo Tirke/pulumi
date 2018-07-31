@@ -280,7 +280,7 @@ func (d *defaultProviders) serve() {
 }
 
 func (d *defaultProviders) getDefaultProviderRef(pkg tokens.Package) (providers.Reference, error) {
-	contract.Assert(pkg != "pulumi-providers")
+	contract.Assert(pkg != "pulumi")
 
 	response := make(chan defaultProviderResponse)
 	d.requests <- defaultProviderRequest{pkg: pkg, response: response}
