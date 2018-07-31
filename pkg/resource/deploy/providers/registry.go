@@ -57,6 +57,10 @@ func (r *registry) RegisterProvider(urn resource.URN, properties resource.Proper
 	r.m.Lock()
 	defer r.m.Unlock()
 
+	if err := validateURN(urn); err != nil {
+		return Reference{}, nil, nilm err
+	}
+
 	id, provider, failures, err := loadProvider(r.host, urn, properties, allowUnknowns)
 	switch {
 	case err != nil:
@@ -65,7 +69,8 @@ func (r *registry) RegisterProvider(urn resource.URN, properties resource.Proper
 		return Reference{}, nil, failures, nil
 	}
 
-	ref := Reference{URN: urn, ID: id}
+	ref, err := NewReference(urn, id)
+	contract.Assert(err == nil)
 	r.providers[ref] = provider
 	return ref, provider, nil, nil
 }

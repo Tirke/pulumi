@@ -17,14 +17,35 @@ package providers
 import (
 	"strings"
 
+	"github.com/pkg/errors"
+
 	"github.com/pulumi/pulumi/pkg/resource"
 )
 
+// IsProviderURN returns true if the supplied URN refers to a Pulumi provider.
+func IsProviderURN(urn resource.URN) bool {
+	return typ.Package() == "pulumi" && typ.Module() == "providers" && typ.Name() != ""
+}
+
+func validateURN(urn resource.URN) error {
+	typ := urn.Type()
+	if typ.Package() != "pulumi" {
+		return errors.Errorf("invalid package in type: expected 'pulumi', got '%v'", typ.Package())
+	}
+	if typ.Module() != "providers" {
+		return errors.Errorf("invaid module in type: expected 'providers', got '%v'", typ.Module())
+	}
+	if typ.Name() == "" {
+		return errors.New("provider URNs must specify a type name")
+	}
+	return nil
+}
+
 // A provider reference is (URN, ID) tuple that refers to a particular provider instance. A provider reference's
-// stirng representation is <URN> "::" <ID>.
+// stirng representation is <URN> "::" <ID>. The URN's type portion must be of the form "pulumi:providers:<pkg>".
 type Reference struct {
-	URN resource.URN
-	ID  resource.ID
+	urn resource.URN
+	id  resource.ID
 }
 
 // String returns the string representation of this provider reference.
@@ -32,17 +53,26 @@ func (p Reference) String() string {
 	return string(p.URN) + resource.URNNameDelimiter + string(p.ID)
 }
 
+// NewReference creates a new reference for the given URN and ID.
+func NewReference(urn resource.URN, id resource.ID) (Reference, error) {
+	if err := validateURN(urn); err != nil {
+		return Reference{}, err
+	}
+	return Reference{urn: urn, id: id}, nil
+}
+
 // ParseReference parses the URN and ID from the string representation of a provider reference. If parsing was
 // not possible, this function returns false.
-func ParseReference(s string) (Reference, bool) {
+func ParseReference(s string) (Reference, error) {
 	// If this is not a valid URN + ID, return false. Note that we don't try terribly hard to validate the URN portion
 	// of the reference.
 	lastSep := strings.LastIndex(s, resource.URNNameDelimiter)
 	if lastSep == -1 {
-		return Reference{}, false
+		return Reference{}, errors.New("expected '%v' in provider reference '%v'", resource.URNNameDelimiter, s)
 	}
-	return Reference{
-		URN: resource.URN(s[:lastSep]),
-		ID:  resource.ID(s[lastSep+len(resource.URNNameDelimiter):]),
-	}, true
+	urn, id := resource.URN(s[:lastSep]), resource.ID(s[lastSep+len(resource.URNNameDelimiter):])
+	if err := validateURN(urn); err != nil {
+		return Reference{}, err
+	}
+	return Reference{urn: urn, id: id}, nil
 }
