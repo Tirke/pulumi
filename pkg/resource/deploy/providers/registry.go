@@ -19,6 +19,7 @@ import (
 	"sync"
 
 	"github.com/blang/semver"
+	uuid "github.com/satori/go.uuid"
 
 	"github.com/pulumi/pulumi/pkg/resource"
 	"github.com/pulumi/pulumi/pkg/resource/config"
@@ -28,191 +29,241 @@ import (
 	"github.com/pulumi/pulumi/pkg/util/logging"
 )
 
-// ProviderRegistry allows access to providers at runtime.
-type Registry interface {
-	// RegisterProvider loads and registers a provider for the given URN.
-	RegisterProvider(urn resource.URN, properties resource.PropertyMap,
-		allowUnknowns bool) (Reference, plugin.Provider, []plugin.CheckFailure, error)
-	// GetProvider returns the provider plugin for the given reference.
-	GetProvider(ref Reference) (plugin.Provider, bool)
-}
-
-func NewRegistry(host plugin.Host) Registry {
-	return &registry{
-		host: host,
-		providers: make(map[Reference]plugin.Provider),
+func getProviderVersion(inputs resource.PropertyMap) (*semver.Version, error) {
+	versionProp, ok := properties["version"]
+	if !ok {
+		return nil, nil
 	}
+
+	if !versionProp.IsString() {
+		return errors.New("'version' must be a string")
+	}
+
+	sv, err := semver.ParseTolerant(versionProp.StringValue())
+	if err != nil {
+		return errors.Errorf("could not parse provider version: %v", err)
+	}
+	return sv, nil
 }
 
-// registry is a concrete implementation of the provider registry.
-type registry struct {
+
+type Registry struct {
 	host plugin.Host
+	isPreview bool
 	providers map[Reference]plugin.Provider
 	m sync.RWMutex
 }
 
-// RegisterProvider loads and registers a provider for the given URN.
-func (r *registry) RegisterProvider(urn resource.URN, properties resource.PropertyMap,
-		allowUnknowns bool) (Reference, plugin.Provider, []plugin.CheckFailure, error) {
-	r.m.Lock()
-	defer r.m.Unlock()
+var _ plugin.Provider = (*Registry)(nil)
 
-	if err := validateURN(urn); err != nil {
-		return Reference{}, nil, nil, err
+func NewRegistry(host plugin.Host, prev []*resource.State, isPreview bool) (*Registry, error) {
+	r := &Registry{
+		host: host,
+		isPreview: isPreview,
+		providers: make(map[Reference]plugin.Provider),
 	}
 
-	id, provider, failures, err := loadProvider(r.host, urn, properties, allowUnknowns)
-	switch {
-	case err != nil:
-		return Reference{}, nil, nil, err
-	case len(failures) != 0:
-		return Reference{}, nil, failures, nil
+	for _, res := range prev {
+		urn := res.URN
+		if !IsProviderType(urn.Type()) {
+			continue
+		}
+
+		// Ensure that this provider has a known ID.
+		if res.ID == "" || res.ID == UnknownID {
+			return nil, errors.Errorf("provider '%v' has an unknown ID", urn)
+		}
+
+		// Parse the provider version, then load, configure, and register the provider.
+		version, err := getProviderVersion(res.Inputs)
+		if err != nil {
+			return nil, errors.Errorf("could not parse version for provider '%v': %v", urn, err)
+		}
+		provider, err := host.Provider(getProviderPackage(urn.Type()), version)
+		if err != nil {
+			return nil, errors.Errorf("could not load provider '%v': %v", urn, err)
+		}
+		if err := provider.Configure(res.Inputs); err != nil {
+			closeErr = host.CloseProvider(provider)
+			contract.IgnoreError(closeErr)
+			return nil, errors.Errof("could not configure provider '%v': %v", urn, err)
+		}
+		r.providers[mustNewReference(urn, id)] = provider
 	}
 
-	ref, err := NewReference(urn, id)
-	contract.Assert(err == nil)
-	r.providers[ref] = provider
-	return ref, provider, nil, nil
+	return r, nil
 }
 
-// GetProvider returns the provider plugin with the given URN and ID.
 func (r *registry) GetProvider(ref Reference) (plugin.Provider, bool) {
 	r.m.RLock()
 	defer r.m.RUnlock()
 
-	p, ok := r.providers[ref]
-	return p, ok
+	provider, ok := r.providers[ref]
+	return provider, ok
 }
 
-// providerInputs collects the inputs necessary to load a provider.
-type providerInputs struct {
-	version *semver.Version
-	config  map[config.Key]string
+func (r *registry) setProvider(ref Reference, provider plugin.Provider) {
+	r.m.Lock()
+	defer r.m.Unlock()
+
+	r.providers[ref] = provider
 }
 
-// parseProperties parses a provider's version and configuraiton out of a property bag. The second return value will be
-// true if any properties in the bag were unknown.
-func parseProperties(pkg tokens.Package,
-	properties resource.PropertyMap, allowUnknowns bool) (providerInputs, bool, []plugin.CheckFailure) {
+func (r *registry) deleteProvider(ref Reference) (plugin.Provider, bool) {
+	r.m.Lock()
+	defer r.m.Unlock()
 
-	var failures []plugin.CheckFailure
-	var version *semver.Version
-	if versionProp, ok := properties["version"]; ok {
-		if !versionProp.IsString() {
-			failures = append(failures, plugin.CheckFailure{
-				Property: "version",
-				Reason:   "'version' must be a string",
-			})
-		} else {
-			sv, err := semver.ParseTolerant(versionProp.StringValue())
-			if err != nil {
-				failures = append(failures, plugin.CheckFailure{
-					Property: "version",
-					Reason:   fmt.Sprintf("could not parse provider version: %v", err),
-				})
-			}
-			version = &sv
-		}
+	provider, ok := r.providers[ref]
+	if !ok {
+		return nil, false
 	}
-
-	// Convert the property map to a provider config map, removing reserved properties.
-	containsUnknowns := false
-	cfg := make(map[config.Key]string)
-	for k, v := range properties {
-		if k == "version" {
-			continue
-		}
-
-		switch {
-		case v.IsComputed():
-			containsUnknowns = true
-			if !allowUnknowns {
-				failures = append(failures, plugin.CheckFailure{
-					Property: k,
-					Reason:   "provider properties must not be unknown",
-				})
-			}
-		case v.IsString():
-			key := config.MustMakeKey(string(pkg), string(k))
-			cfg[key] = v.StringValue()
-		default:
-			failures = append(failures, plugin.CheckFailure{
-				Property: k,
-				Reason:   "provider property values must be strings",
-			})
-		}
-	}
-
-	inputs := providerInputs{
-		version: version,
-		config: cfg,
-	}
-	return inputs, containsUnknowns, failures
+	delete(r.providers, ref)
+	return provider, true
 }
 
-// createShim creates a shim for the given provider.
-func createShim(host plugin.Host, pkg tokens.Package, version *semver.Version) (plugin.Provider, error) {
-	// Load the provider, get its info, and construct an appropriate shim.
-	provider, err := host.Provider(pkg, version)
+func (r *registry) Close() error {
+	return nil
+}
+
+func (r *registry) Pkg() tokens.Package {
+	return "pulumi"
+}
+
+func (r *registry) Configure(props map[config.Key]string) error {
+	contract.Fail()
+	return errors.New("the metaProvider is not configurable")
+}
+
+func (r *registry) Check(urn resource.URN, olds, news resource.PropertyMap,
+	allowUnknowns bool) (resource.PropertyMap, []plugin.CheckFailure, error) {
+
+	contract.Require(IsProviderType(urn.Type()), "urn")
+
+	// Parse the version from the provider properties and load the provider.
+	version, err := getProviderVersion(news)
 	if err != nil {
-		return nil, err
+		return nil, []plugin.CheckFailure{Property: "version", Reason: err.String()}, nil
 	}
-	defer func() { contract.IgnoreError(host.CloseProvider(provider)) }()
-
-	info, err := provider.GetPluginInfo()
+	provider, err := r.host.Provider(getProviderPackage(urn.Type()), version)
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 
-	shim := &shimProvider{
-		pkg: pkg,
-		info: info,
+	// Check the provider's config. If the check fails, unload the provider.
+	inputs, failures, err := provider.CheckConfig(olds, news)
+	if len(failures) != 0 || err != nil {
+		closeErr := r.host.CloseProvider(provider)
+		contract.IgnoreError(closeErr)
+		return nil, failures, err
 	}
-	return shim, nil
+
+	// If we are running a preview, configure the provider now. If we are not running a preview, we will configure the
+	// provider when it is created or updated.
+	if r.isPreview {
+		if err := provider.Configure(inputs); err != nil {
+			closeErr := r.host.CloseProvider(provider)
+			contract.IgnoreError(closeErr)
+			return nil, nil, err
+		}
+	}
+
+	// Create a provider reference using the URN and the unknown ID and register the provider.
+	r.setProvider(mustNewReference(urn, UnknownID), provider)
+
+	return inputs, nil, nil
 }
 
-// loadProvider loads a provider for the given URN with the indicated properties.
-func loadProvider(host plugin.Host, urn resource.URN, properties resource.PropertyMap,
-	allowUnknowns bool) (resource.ID, plugin.Provider, []plugin.CheckFailure, error) {
+func (r *registry) Diff(urn resource.URN, id resource.ID, olds, news resource.PropertyMap,
+	allowUnknowns bool) (plugin.DiffResult, error) {
 
-	logging.V(7).Infof("loading provider %v", urn)
+	contract.Require(id != "", "id")
 
-	pkg := tokens.Package(urn.Type().Name())
+	// Create a reference using the URN and the unknown ID and fetch the provider.
+	provider, ok = r.GetProvider(mustNewReference(urn, UnknownID))
+	contract.Assertf(ok, "'Check' must be called before 'Diff'")
 
-	// Parse the property bag. If there are any validation failures, simply return them.
-	inputs, hasUnknowns, failures := parseProperties(pkg, properties, allowUnknowns)
-	if len(failures) != 0 {
-		return "", nil, failures, nil
-	}
-
-	// If there were any unknown properties, we'll need to shim the provider. Note that if we get this far we must
-	// be performing a preview and don't need to return a real ID.
-	if hasUnknowns {
-		contract.Assert(allowUnknowns)
-		shim, err := createShim(host, pkg, inputs.version)
-		if err != nil {
-			return "", nil, nil, err
-		}
-		return "", shim, nil, err
-	}
-
-	// Finally, attempt to load and configure the provider.
-	provider, err := host.Provider(pkg, inputs.version)
+	// Diff the properties.
+	diff, err := provider.DiffConfig(olds, news)
 	if err != nil {
-		return "", nil, nil, err
+		return plugin.DiffResult{Changes: plugin.DiffUnknown}, err
 	}
 
-	// If we have config, attempt to configure the plugin. If configuration fails, discard the loaded plugin.
-	if err = provider.Configure(inputs.config); err != nil {
-		closeErr := host.CloseProvider(provider)
-		if closeErr != nil {
-			logging.Infof("Error closing provider; ignoring: %v", closeErr)
-		}
-		return "", nil, nil, err
+	// If the diff requires replacement, unload the provider: the engine will reload it during its replacememnt Check.
+	// If the diff does not require replacement and we are running a preview, register it under its current ID.
+	if len(diff.ReplaceKeys) != 0 {
+		closeErr := r.host.CloseProvider(provider)
+		contract.IgnoreError(closeErr)
+	} else if r.isPreview {
+		r.setProvider(mustNewReference(urn, id), provider)
 	}
 
-	logging.V(7).Infof("loaded provider %v", urn)
+	return diff, nil
+}
 
-	// Legacy providers always receive the same ID: "v0".
-	return "v0", provider, nil, nil
+func (r *registry) Create(urn resource.URN,
+	news resource.PropertyMap) (resource.ID, resource.PropertyMap, resource.Status, error) {
+
+	contract.Assert(!isPreview)
+
+	// Fetch the unconfigured provider, configure it, and register it under a new ID.
+	provider, ok := r.GetProvider(mustNewReference(urn, UnknownID))
+	contract.Assertf(ok, "'Check' must be called before 'Create'")
+
+	if err := provider.Configure(news); err != nil {
+		return "", nil, resource.StatusOK, err
+	}
+
+	id := uuid.NewV4().String()
+	contract.Assert(id != UnknownID)
+
+	r.setProvider(mustNewReference(urn, id), provider)
+	return id, resource.PropertyMap{}, resource.StatusOK, nil
+}
+
+func (r *registry) Read(urn resource.URN, id resource.ID,
+	props resource.PropertyMap) (resource.PropertyMap, error) {
+	contract.Fail()
+	return nil, errors.New("providers may not be read")
+}
+
+func (r *registry) Update(urn resource.URN, id resource.ID, olds,
+	news resource.PropertyMap) (resource.PropertyMap, resource.Status, error) {
+
+	// Fetch the unconfigured provider and configure it.
+	provider, ok := r.GetProvider(mustNewReference(urn, id))
+	contract.Assertf(ok, "'Check' and 'Diff' must be called before 'Update'")
+
+	if err := provider.Configure(news); err != nil {
+		return nil, resource.StatusUnknown, err
+	}
+
+	return resource.PropertyMap{}, resource.StatusOK, nil
+}
+
+func (r *registry) Delete(urn resource.URN, id resource.ID, props resource.PropertyMap) (resource.Status, error) {
+	ref := mustNewReference(urn, id)
+	provider, ok := r.deleteProvider(ref)
+	if !ok {
+		return resource.StatusUnknown, errors.Errorf("unknown provider '%v'", ref)
+	}
+	closeErr := r.host.CloseProvider(provider)
+	contract.IgnoreError(closeErr)
+	return resource.StatusOK, nil
+}
+
+func (r *registry) Invoke(tok tokens.ModuleMember,
+	args resource.PropertyMap) (resource.PropertyMap, []plugin.CheckFailure, error) {
+	contract.Fail()
+	return nil, nil, errors.New("the metaProvider is not invokeable")
+}
+
+func (r *registry) GetPluginInfo() (workspace.PluginInfo, error) {
+	// return an error: this should not be called for the metaProvider
+	contract.Fail()
+	return workspace.PluginInfo{}, errors.New("the metaProvider does not report plugin info")
+}
+
+func (r *registry) SignalCancellation() error {
+	// TODO: this should probably cancel any outstanding load requests and return
+	return nil
 }

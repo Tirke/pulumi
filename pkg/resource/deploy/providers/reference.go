@@ -20,8 +20,11 @@ import (
 	"github.com/pkg/errors"
 
 	"github.com/pulumi/pulumi/pkg/resource"
+	"github.com/pulumi/pulumi/pkg/resource/plugin"
 	"github.com/pulumi/pulumi/pkg/tokens"
 )
+
+const UnknownID = plugin.UnknownStringValue
 
 // IsProviderType returns true if the supplied type token refers to a Pulumi provider.
 func IsProviderType(typ tokens.Type) bool {
@@ -33,13 +36,18 @@ func MakeProviderType(pkg tokens.Package) tokens.Type {
 	return tokens.Type("pulumi:providers:" + pkg)
 }
 
+func getProviderPackage(typ tokens.Type) tokens.Package {
+	contract.Require(IsProviderType(typ), "typ")
+	return tokens.Package(typ.Name())
+}
+
 func validateURN(urn resource.URN) error {
 	typ := urn.Type()
 	if typ.Package() != "pulumi" {
 		return errors.Errorf("invalid package in type: expected 'pulumi', got '%v'", typ.Package())
 	}
 	if typ.Module() != "providers" {
-		return errors.Errorf("invaid module in type: expected 'providers', got '%v'", typ.Module())
+		return errors.Errorf("invalid module in type: expected 'providers', got '%v'", typ.Module())
 	}
 	if typ.Name() == "" {
 		return errors.New("provider URNs must specify a type name")
@@ -48,15 +56,25 @@ func validateURN(urn resource.URN) error {
 }
 
 // A provider reference is (URN, ID) tuple that refers to a particular provider instance. A provider reference's
-// stirng representation is <URN> "::" <ID>. The URN's type portion must be of the form "pulumi:providers:<pkg>".
+// string representation is <URN> "::" <ID>. The URN's type portion must be of the form "pulumi:providers:<pkg>".
 type Reference struct {
 	urn resource.URN
 	id  resource.ID
 }
 
+// URN returns the provider reference's URN.
+func (r Reference) URN() resource.URN {
+	return r.urn
+}
+
+// ID returns the provider reference's ID.
+func (r Reference) ID() resource.ID {
+	return r.id
+}
+
 // String returns the string representation of this provider reference.
-func (p Reference) String() string {
-	return string(p.urn) + resource.URNNameDelimiter + string(p.id)
+func (r Reference) String() string {
+	return string(r.urn) + resource.URNNameDelimiter + string(r.id)
 }
 
 // NewReference creates a new reference for the given URN and ID.
@@ -66,6 +84,11 @@ func NewReference(urn resource.URN, id resource.ID) (Reference, error) {
 	}
 	return Reference{urn: urn, id: id}, nil
 }
+
+func mustNewReference(urn resource.URN, id resource.ID) Reference {
+	ref, err := NewReference(urn, id)
+	contract.Assert(err == nil)
+	return ref
 
 // ParseReference parses the URN and ID from the string representation of a provider reference. If parsing was
 // not possible, this function returns false.
