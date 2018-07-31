@@ -22,26 +22,26 @@ import (
 
 // A provider reference is (URN, ID) tuple that refers to a particular provider instance. A provider reference's
 // stirng representation is <URN> "::" <ID>.
-type ProviderReference struct {
+type Reference struct {
 	URN resource.URN
 	ID  resource.ID
 }
 
 // String returns the string representation of this provider reference.
-func (p ProviderReference) String() string {
+func (p Reference) String() string {
 	return string(p.URN) + resource.URNNameDelimiter + string(p.ID)
 }
 
-// ParseProviderReference parses the URN and ID from the string representation of a provider reference. If parsing was
+// ParseReference parses the URN and ID from the string representation of a provider reference. If parsing was
 // not possible, this function returns false.
-func ParseProviderReference(s string) (ProviderReference, bool) {
+func ParseReference(s string) (Reference, bool) {
 	// If this is not a valid URN + ID, return false. Note that we don't try terribly hard to validate the URN portion
 	// of the reference.
 	lastSep := strings.LastIndex(s, resource.URNNameDelimiter)
 	if lastSep == -1 {
-		return ProviderReference{}, false
+		return Reference{}, false
 	}
-	return ProviderReference{
+	return Reference{
 		URN: resource.URN(s[:lastSep]),
 		ID:  resource.ID(s[lastSep+len(resource.URNNameDelimiter):]),
 	}, true

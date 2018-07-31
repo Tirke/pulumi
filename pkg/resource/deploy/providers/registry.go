@@ -32,46 +32,46 @@ import (
 type Registry interface {
 	// RegisterProvider loads and registers a provider for the given URN.
 	RegisterProvider(urn resource.URN, properties resource.PropertyMap,
-		allowUnknowns bool) (ProviderReference, plugin.Provider, []plugin.CheckFailure, error)
+		allowUnknowns bool) (Reference, plugin.Provider, []plugin.CheckFailure, error)
 	// GetProvider returns the provider plugin for the given reference.
-	GetProvider(ref ProviderReference) (plugin.Provider, bool)
+	GetProvider(ref Reference) (plugin.Provider, bool)
 }
 
 func NewRegistry(host plugin.Host) Registry {
 	return &registry{
 		host: host,
-		providers: make(map[ProviderReference]plugin.Provider),
+		providers: make(map[Reference]plugin.Provider),
 	}
 }
 
 // registry is a concrete implementation of the provider registry.
 type registry struct {
 	host plugin.Host
-	providers map[ProviderReference]plugin.Provider
+	providers map[Reference]plugin.Provider
 	m sync.RWMutex
 }
 
 // RegisterProvider loads and registers a provider for the given URN.
 func (r *registry) RegisterProvider(urn resource.URN, properties resource.PropertyMap,
-		allowUnknowns bool) (ProviderReference, plugin.Provider, []plugin.CheckFailure, error) {
+		allowUnknowns bool) (Reference, plugin.Provider, []plugin.CheckFailure, error) {
 	r.m.Lock()
 	defer r.m.Unlock()
 
 	id, provider, failures, err := loadProvider(r.host, urn, properties, allowUnknowns)
 	switch {
 	case err != nil:
-		return ProviderReference{}, nil, nil, err
+		return Reference{}, nil, nil, err
 	case len(failures) != 0:
-		return ProviderReference{}, nil, failures, nil
+		return Reference{}, nil, failures, nil
 	}
 
-	ref := ProviderReference{URN: urn, ID: id}
+	ref := Reference{URN: urn, ID: id}
 	r.providers[ref] = provider
 	return ref, provider, nil, nil
 }
 
 // GetProvider returns the provider plugin with the given URN and ID.
-func (r *registry) GetProvider(ref ProviderReference) (plugin.Provider, bool) {
+func (r *registry) GetProvider(ref Reference) (plugin.Provider, bool) {
 	r.m.RLock()
 	defer r.m.RUnlock()
 
