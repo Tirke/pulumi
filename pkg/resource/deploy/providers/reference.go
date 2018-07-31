@@ -20,10 +20,11 @@ import (
 	"github.com/pkg/errors"
 
 	"github.com/pulumi/pulumi/pkg/resource"
+	"github.com/pulumi/pulumi/pkg/tokens"
 )
 
-// IsProviderURN returns true if the supplied URN refers to a Pulumi provider.
-func IsProviderURN(urn resource.URN) bool {
+// IsProviderType returns true if the supplied type token refers to a Pulumi provider.
+func IsProviderType(typ tokens.Type) bool {
 	return typ.Package() == "pulumi" && typ.Module() == "providers" && typ.Name() != ""
 }
 
