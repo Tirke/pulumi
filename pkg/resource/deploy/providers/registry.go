@@ -47,19 +47,18 @@ func getProviderVersion(inputs resource.PropertyMap) (*semver.Version, error) {
 	return &sv, nil
 }
 
-
 type Registry struct {
-	host plugin.Host
+	host      plugin.Host
 	isPreview bool
 	providers map[Reference]plugin.Provider
-	m sync.RWMutex
+	m         sync.RWMutex
 }
 
 var _ plugin.Provider = (*Registry)(nil)
 
 func NewRegistry(host plugin.Host, prev []*resource.State, isPreview bool) (*Registry, error) {
 	r := &Registry{
-		host: host,
+		host:      host,
 		isPreview: isPreview,
 		providers: make(map[Reference]plugin.Provider),
 	}
