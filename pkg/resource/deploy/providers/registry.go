@@ -67,6 +67,7 @@ func NewRegistry(host plugin.Host, prev []*resource.State, isPreview bool) (*Reg
 	for _, res := range prev {
 		urn := res.URN
 		if !IsProviderType(urn.Type()) {
+			logging.V(7).Infof("provider(%v): %v", urn, res.Provider)
 			continue
 		}
 
@@ -89,7 +90,10 @@ func NewRegistry(host plugin.Host, prev []*resource.State, isPreview bool) (*Reg
 			contract.IgnoreError(closeErr)
 			return nil, errors.Errorf("could not configure provider '%v': %v", urn, err)
 		}
-		r.providers[mustNewReference(urn, res.ID)] = provider
+
+		ref := mustNewReference(urn, res.ID)
+		logging.V(7).Infof("loaded provider %v", ref)
+		r.providers[ref] = provider
 	}
 
 	return r, nil
