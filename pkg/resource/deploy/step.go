@@ -382,7 +382,7 @@ func NewReplaceStep(plan *Plan, old *resource.State, new *resource.State,
 func (s *ReplaceStep) Op() StepOp                   { return OpReplace }
 func (s *ReplaceStep) Plan() *Plan                  { return s.plan }
 func (s *ReplaceStep) Type() tokens.Type            { return s.old.Type }
-func (s *ReplaceStep) Provider() string             { return "" }
+func (s *ReplaceStep) Provider() string             { return s.old.Provider }
 func (s *ReplaceStep) URN() resource.URN            { return s.old.URN }
 func (s *ReplaceStep) Old() *resource.State         { return s.old }
 func (s *ReplaceStep) New() *resource.State         { return s.new }
