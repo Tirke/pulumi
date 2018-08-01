@@ -30,8 +30,8 @@ import (
 // and calculating the appropriate step action based on the requested goal
 // state and the existing state of the world.
 type stepGenerator struct {
-	plan *Plan                    // the plan to which this step generator belongs
-	opts Options                  // options for this step generator
+	plan *Plan   // the plan to which this step generator belongs
+	opts Options // options for this step generator
 
 	urns     map[resource.URN]bool // set of URNs discovered for this plan
 	deletes  map[resource.URN]bool // set of URNs deleted in this plan

@@ -69,10 +69,10 @@ type PlanSummary interface {
 
 // PlanIterator can be used to step through and/or execute a plan's proposed actions.
 type PlanIterator struct {
-	p         *Plan               // the plan to which this iterator belongs.
-	opts      Options             // the options this iterator was created with.
-	src       SourceIterator      // the iterator that fetches source resources.
-	stepGen   *stepGenerator      // the step generator for this plan.
+	p       *Plan          // the plan to which this iterator belongs.
+	opts    Options        // the options this iterator was created with.
+	src     SourceIterator // the iterator that fetches source resources.
+	stepGen *stepGenerator // the step generator for this plan.
 
 	pendingNews map[resource.URN]Step // a map of logical steps currently active.
 

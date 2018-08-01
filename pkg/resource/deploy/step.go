@@ -29,15 +29,15 @@ import (
 type Step interface {
 	Apply(preview bool) (resource.Status, error) // applies or previews this step.
 
-	Op() StepOp             // the operation performed by this step.
-	URN() resource.URN      // the resource URN (for before and after).
-	Type() tokens.Type      // the type affected by this step.
-	Provider() string       // the provider reference for this step.
-	Old() *resource.State   // the state of the resource before performing this step.
-	New() *resource.State   // the state of the resource after performing this step.
-	Res() *resource.State   // the latest state for the resource that is known (worst case, old).
-	Logical() bool          // true if this step represents a logical operation in the program.
-	Plan() *Plan            // the owning plan.
+	Op() StepOp           // the operation performed by this step.
+	URN() resource.URN    // the resource URN (for before and after).
+	Type() tokens.Type    // the type affected by this step.
+	Provider() string     // the provider reference for this step.
+	Old() *resource.State // the state of the resource before performing this step.
+	New() *resource.State // the state of the resource after performing this step.
+	Res() *resource.State // the latest state for the resource that is known (worst case, old).
+	Logical() bool        // true if this step represents a logical operation in the program.
+	Plan() *Plan          // the owning plan.
 }
 
 // SameStep is a mutating step that does nothing.
@@ -68,15 +68,15 @@ func NewSameStep(plan *Plan, reg RegisterResourceEvent, old *resource.State, new
 	}
 }
 
-func (s *SameStep) Op() StepOp             { return OpSame }
-func (s *SameStep) Plan() *Plan            { return s.plan }
-func (s *SameStep) Type() tokens.Type      { return s.old.Type }
-func (s *SameStep) Provider() string       { return s.old.Provider }
-func (s *SameStep) URN() resource.URN      { return s.old.URN }
-func (s *SameStep) Old() *resource.State   { return s.old }
-func (s *SameStep) New() *resource.State   { return s.new }
-func (s *SameStep) Res() *resource.State   { return s.new }
-func (s *SameStep) Logical() bool          { return true }
+func (s *SameStep) Op() StepOp           { return OpSame }
+func (s *SameStep) Plan() *Plan          { return s.plan }
+func (s *SameStep) Type() tokens.Type    { return s.old.Type }
+func (s *SameStep) Provider() string     { return s.old.Provider }
+func (s *SameStep) URN() resource.URN    { return s.old.URN }
+func (s *SameStep) Old() *resource.State { return s.old }
+func (s *SameStep) New() *resource.State { return s.new }
+func (s *SameStep) Res() *resource.State { return s.new }
+func (s *SameStep) Logical() bool        { return true }
 
 func (s *SameStep) Apply(preview bool) (resource.Status, error) {
 	// Retain the URN, ID, and outputs:
@@ -234,14 +234,14 @@ func (s *DeleteStep) Op() StepOp {
 	}
 	return OpDelete
 }
-func (s *DeleteStep) Plan() *Plan            { return s.plan }
-func (s *DeleteStep) Type() tokens.Type      { return s.old.Type }
-func (s *DeleteStep) Provider() string       { return s.old.Provider }
-func (s *DeleteStep) URN() resource.URN      { return s.old.URN }
-func (s *DeleteStep) Old() *resource.State   { return s.old }
-func (s *DeleteStep) New() *resource.State   { return nil }
-func (s *DeleteStep) Res() *resource.State   { return s.old }
-func (s *DeleteStep) Logical() bool          { return !s.replacing }
+func (s *DeleteStep) Plan() *Plan          { return s.plan }
+func (s *DeleteStep) Type() tokens.Type    { return s.old.Type }
+func (s *DeleteStep) Provider() string     { return s.old.Provider }
+func (s *DeleteStep) URN() resource.URN    { return s.old.URN }
+func (s *DeleteStep) Old() *resource.State { return s.old }
+func (s *DeleteStep) New() *resource.State { return nil }
+func (s *DeleteStep) Res() *resource.State { return s.old }
+func (s *DeleteStep) Logical() bool        { return !s.replacing }
 
 func (s *DeleteStep) Apply(preview bool) (resource.Status, error) {
 	// Refuse to delete protected resources.
@@ -298,15 +298,15 @@ func NewUpdateStep(plan *Plan, reg RegisterResourceEvent, old *resource.State,
 	}
 }
 
-func (s *UpdateStep) Op() StepOp             { return OpUpdate }
-func (s *UpdateStep) Plan() *Plan            { return s.plan }
-func (s *UpdateStep) Type() tokens.Type      { return s.old.Type }
-func (s *UpdateStep) Provider() string       { return s.old.Provider }
-func (s *UpdateStep) URN() resource.URN      { return s.old.URN }
-func (s *UpdateStep) Old() *resource.State   { return s.old }
-func (s *UpdateStep) New() *resource.State   { return s.new }
-func (s *UpdateStep) Res() *resource.State   { return s.new }
-func (s *UpdateStep) Logical() bool          { return true }
+func (s *UpdateStep) Op() StepOp           { return OpUpdate }
+func (s *UpdateStep) Plan() *Plan          { return s.plan }
+func (s *UpdateStep) Type() tokens.Type    { return s.old.Type }
+func (s *UpdateStep) Provider() string     { return s.old.Provider }
+func (s *UpdateStep) URN() resource.URN    { return s.old.URN }
+func (s *UpdateStep) Old() *resource.State { return s.old }
+func (s *UpdateStep) New() *resource.State { return s.new }
+func (s *UpdateStep) Res() *resource.State { return s.new }
+func (s *UpdateStep) Logical() bool        { return true }
 
 func (s *UpdateStep) Apply(preview bool) (resource.Status, error) {
 	// Always propagate the URN and ID, even in previews and refreshes.

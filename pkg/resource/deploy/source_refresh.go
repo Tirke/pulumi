@@ -55,21 +55,21 @@ func (src *refreshSource) Iterate(opts Options, provs ProviderSource) (SourceIte
 	}
 
 	return &refreshSourceIterator{
-		plugctx:                 src.plugctx,
-		target:                  src.target,
-		providers:               provs,
-		states:                  states,
-		current:                 -1,
+		plugctx:   src.plugctx,
+		target:    src.target,
+		providers: provs,
+		states:    states,
+		current:   -1,
 	}, nil
 }
 
 // refreshSourceIterator returns state from an existing snapshot, augmented by consulting the resource provider.
 type refreshSourceIterator struct {
-	plugctx                 *plugin.Context
-	target                  *Target
-	providers               ProviderSource
-	states                  []*resource.State
-	current                 int
+	plugctx   *plugin.Context
+	target    *Target
+	providers ProviderSource
+	states    []*resource.State
+	current   int
 }
 
 func (iter *refreshSourceIterator) Close() error {

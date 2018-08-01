@@ -21,14 +21,14 @@ import (
 // Goal is a desired state for a resource object.  Normally it represents a subset of the resource's state expressed by
 // a program, however if Output is true, it represents a more complete, post-deployment view of the state.
 type Goal struct {
-	Type         tokens.Type         // the type of resource.
-	Name         tokens.QName        // the name for the resource's URN.
-	Custom       bool                // true if this resource is custom, managed by a plugin.
-	Properties   PropertyMap         // the resource's property state.
-	Parent       URN                 // an optional parent URN for this resource.
-	Protect      bool                // true to protect this resource from deletion.
-	Dependencies []URN               // dependencies of this resource object.
-	Provider     string // the provider to use for this resource.
+	Type         tokens.Type  // the type of resource.
+	Name         tokens.QName // the name for the resource's URN.
+	Custom       bool         // true if this resource is custom, managed by a plugin.
+	Properties   PropertyMap  // the resource's property state.
+	Parent       URN          // an optional parent URN for this resource.
+	Protect      bool         // true to protect this resource from deletion.
+	Dependencies []URN        // dependencies of this resource object.
+	Provider     string       // the provider to use for this resource.
 }
 
 // NewGoal allocates a new resource goal state.
