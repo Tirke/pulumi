@@ -25,6 +25,9 @@ import (
 	"github.com/pulumi/pulumi/pkg/util/contract"
 )
 
+// A provider reference is (URN, ID) tuple that refers to a particular provider instance. A provider reference's
+// string representation is <URN> "::" <ID>. The URN's type portion must be of the form "pulumi:providers:<pkg>".
+
 const UnknownID = plugin.UnknownStringValue
 
 // IsProviderType returns true if the supplied type token refers to a Pulumi provider.
@@ -53,8 +56,7 @@ func validateURN(urn resource.URN) error {
 	return nil
 }
 
-// A provider reference is (URN, ID) tuple that refers to a particular provider instance. A provider reference's
-// string representation is <URN> "::" <ID>. The URN's type portion must be of the form "pulumi:providers:<pkg>".
+// Reference represents a reference to a particular provider.
 type Reference struct {
 	urn resource.URN
 	id  resource.ID
