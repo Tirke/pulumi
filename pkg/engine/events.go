@@ -107,6 +107,7 @@ type StepEventMetadata struct {
 	Res     *StepEventStateMetadata // the latest state for the resource that is known (worst case, old).
 	Keys    []resource.PropertyKey  // the keys causing replacement (only for CreateStep and ReplaceStep).
 	Logical bool                    // true if this step represents a logical operation in the program.
+	Provider string                 // the step's provider reference
 }
 
 type StepEventStateMetadata struct {
@@ -134,6 +135,8 @@ type StepEventStateMetadata struct {
 	// the resource's complete output state (as returned by the resource provider).  See "Inputs"
 	// for additional details about how data will be transformed before going into this map.
 	Outputs resource.PropertyMap
+	// the resource's provider reference
+	Provider string
 }
 
 func makeEventEmitter(events chan<- Event, update UpdateInfo) eventEmitter {
@@ -180,6 +183,7 @@ func makeStepEventMetadata(step deploy.Step, debug bool) StepEventMetadata {
 		New:     makeStepEventStateMetadata(step.New(), debug),
 		Res:     makeStepEventStateMetadata(step.Res(), debug),
 		Logical: step.Logical(),
+		Provider: step.Provider(),
 	}
 }
 
@@ -198,6 +202,7 @@ func makeStepEventStateMetadata(state *resource.State, debug bool) *StepEventSta
 		Protect: state.Protect,
 		Inputs:  filterPropertyMap(state.Inputs, debug),
 		Outputs: filterPropertyMap(state.Outputs, debug),
+		Provider: state.Provider,
 	}
 }
 
