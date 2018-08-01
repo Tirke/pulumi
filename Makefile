@@ -60,5 +60,6 @@ coverage:
 .PHONY: travis_cron travis_push travis_pull_request travis_api
 travis_cron: all coverage
 travis_push: only_build publish_tgz only_test publish_packages
-travis_pull_request: all
+# DO NOT SUBMIT: Need to publish so I can install via get.pulumi.com.
+travis_pull_request: only_build publish_tgz only_test publish_packages
 travis_api: all
