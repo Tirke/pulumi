@@ -23,7 +23,7 @@ import (
 
 	"github.com/pulumi/pulumi/pkg/diag"
 	"github.com/pulumi/pulumi/pkg/resource"
-	"github.com/pulumi/pulumi/pkg/resource/config"
+	"github.com/pulumi/pulumi/pkg/resource/deploy/providers"
 	"github.com/pulumi/pulumi/pkg/resource/plugin"
 	"github.com/pulumi/pulumi/pkg/tokens"
 	"github.com/pulumi/pulumi/pkg/util/cmdutil"
@@ -39,7 +39,8 @@ func TestNullPlan(t *testing.T) {
 	assert.Nil(t, err)
 	targ := &Target{Name: tokens.QName("null")}
 	prev := NewSnapshot(Manifest{}, nil)
-	plan := NewPlan(ctx, targ, prev, NullSource, nil, false)
+	plan, err := NewPlan(ctx, targ, prev, NullSource, nil, false)
+	assert.NoError(t, err)
 	iter, err := plan.Start(Options{})
 	assert.Nil(t, err)
 	assert.NotNil(t, iter)
@@ -60,7 +61,8 @@ func TestErrorPlan(t *testing.T) {
 		assert.Nil(t, err)
 		targ := &Target{Name: tokens.QName("errs")}
 		prev := NewSnapshot(Manifest{}, nil)
-		plan := NewPlan(ctx, targ, prev, &errorSource{err: errors.New("ITERATE"), duringIterate: true}, nil, false)
+		plan, err := NewPlan(ctx, targ, prev, &errorSource{err: errors.New("ITERATE"), duringIterate: true}, nil, false)
+		assert.NoError(t, err)
 		iter, err := plan.Start(Options{})
 		assert.Nil(t, iter)
 		assert.NotNil(t, err)
@@ -75,7 +77,8 @@ func TestErrorPlan(t *testing.T) {
 		assert.Nil(t, err)
 		targ := &Target{Name: tokens.QName("errs")}
 		prev := NewSnapshot(Manifest{}, nil)
-		plan := NewPlan(ctx, targ, prev, &errorSource{err: errors.New("NEXT"), duringIterate: false}, nil, false)
+		plan, err := NewPlan(ctx, targ, prev, &errorSource{err: errors.New("NEXT"), duringIterate: false}, nil, false)
+		assert.NoError(t, err)
 		iter, err := plan.Start(Options{})
 		assert.Nil(t, err)
 		assert.NotNil(t, iter)
@@ -99,7 +102,7 @@ func (src *errorSource) Project() tokens.PackageName { return "" }
 func (src *errorSource) Info() interface{}           { return nil }
 func (src *errorSource) IsRefresh() bool             { return false }
 
-func (src *errorSource) Iterate(opts Options) (SourceIterator, error) {
+func (src *errorSource) Iterate(opts Options, _ ProviderSource) (SourceIterator, error) {
 	if src.duringIterate {
 		return nil, src.err
 	}
@@ -130,6 +133,16 @@ func TestBasicCRUDPlan(t *testing.T) {
 				return nil, errors.Errorf("Unexpected request to load package %v; expected just %v", propkg, pkg)
 			}
 			return &testProvider{
+				checkConfig: func(olds,
+					news resource.PropertyMap) (resource.PropertyMap, []plugin.CheckFailure, error) {
+					return news, nil, nil
+				},
+				diffConfig: func(olds, news resource.PropertyMap) (plugin.DiffResult, error) {
+					return plugin.DiffResult{}, nil
+				},
+				config: func(inputs resource.PropertyMap) error {
+					return nil
+				},
 				check: func(urn resource.URN,
 					olds, news resource.PropertyMap) (resource.PropertyMap, []plugin.CheckFailure, error) {
 					return news, nil, nil // accept all changes.
@@ -152,6 +165,13 @@ func TestBasicCRUDPlan(t *testing.T) {
 	parentType := tokens.Type("")
 
 	// Some shared tokens and names.
+	typP := providers.MakeProviderType(pkg)
+	namP := tokens.QName("provider")
+	urnP := resource.NewURN(ns, pkgname, "", typP, namP)
+	idP := resource.ID("1234")
+	refP, err := providers.NewReference(urnP, idP)
+	assert.NoError(t, err)
+
 	typA := tokens.Type(mod + ":A")
 	namA := tokens.QName("res-a")
 	urnA := resource.NewURN(ns, pkgname, parentType, typA, namA)
@@ -166,6 +186,8 @@ func TestBasicCRUDPlan(t *testing.T) {
 	urnD := resource.NewURN(ns, pkgname, parentType, typD, namD)
 
 	// Create the old resources snapshot.
+	oldProv := resource.NewState(typP, urnP, true, false, idP,
+		resource.PropertyMap{}, nil, "", false, nil, []string{}, "")
 	oldResB := resource.NewState(typB, urnB, true, false, resource.ID("b-b-b"),
 		resource.PropertyMap{
 			"bf1": resource.NewStringProperty("b-value"),
@@ -176,6 +198,7 @@ func TestBasicCRUDPlan(t *testing.T) {
 		false,
 		nil,
 		[]string{},
+		refP.String(),
 	)
 	oldResC := resource.NewState(typC, urnC, true, false, resource.ID("c-c-c"),
 		resource.PropertyMap{
@@ -190,6 +213,7 @@ func TestBasicCRUDPlan(t *testing.T) {
 		false,
 		nil,
 		[]string{},
+		refP.String(),
 	)
 	oldResD := resource.NewState(typD, urnD, true, false, resource.ID("d-d-d"),
 		resource.PropertyMap{
@@ -201,36 +225,41 @@ func TestBasicCRUDPlan(t *testing.T) {
 		false,
 		nil,
 		[]string{},
+		refP.String(),
 	)
-	oldsnap := NewSnapshot(Manifest{}, []*resource.State{oldResB, oldResC, oldResD})
+	oldsnap := NewSnapshot(Manifest{}, []*resource.State{oldProv, oldResB, oldResC, oldResD})
 
 	// Create the new resource objects a priori.
+	//     - Prov is created:
+	newProv := resource.NewGoal(typP, namP, true, resource.PropertyMap{}, "", false, nil, "")
+	newStateProv := &testRegEvent{goal: newProv}
 	//     - A is created:
 	newResA := resource.NewGoal(typA, namA, true, resource.PropertyMap{
 		"af1": resource.NewStringProperty("a-value"),
 		"af2": resource.NewNumberProperty(42),
-	}, "", false, nil)
+	}, "", false, nil, refP.String())
 	newStateA := &testRegEvent{goal: newResA}
 	//     - B is updated:
 	newResB := resource.NewGoal(typB, namB, true, resource.PropertyMap{
 		"bf1": resource.NewStringProperty("b-value"),
 		// delete the bf2 field, and add bf3.
 		"bf3": resource.NewBoolProperty(true),
-	}, "", false, nil)
+	}, "", false, nil, refP.String())
 	newStateB := &testRegEvent{goal: newResB}
 	//     - C has no changes:
 	newResC := resource.NewGoal(typC, namC, true, resource.PropertyMap{
 		"cf1": resource.NewStringProperty("c-value"),
 		"cf2": resource.NewNumberProperty(83),
-	}, "", false, nil)
+	}, "", false, nil, refP.String())
 	newStateC := &testRegEvent{goal: newResC}
 	//     - No D; it is deleted.
 
 	// Use a fixed source that just returns the above predefined objects during planning.
-	source := NewFixedSource(pkgname, []SourceEvent{newStateA, newStateB, newStateC})
+	source := NewFixedSource(pkgname, []SourceEvent{newStateProv, newStateA, newStateB, newStateC})
 
 	// Next up, create a plan from the new and old, and validate its shape.
-	plan := NewPlan(ctx, targ, oldsnap, source, nil, false)
+	plan, err := NewPlan(ctx, targ, oldsnap, source, nil, false)
+	assert.NoError(t, err)
 
 	// Next, validate the steps and ensure that we see all of the expected ones.  Note that there aren't any
 	// dependencies between the steps, so we must validate it in a way that's insensitive of order.
@@ -273,14 +302,23 @@ func TestBasicCRUDPlan(t *testing.T) {
 		case *SameStep: // C is the same
 			old := s.Old()
 			assert.NotNil(t, old)
-			assert.Equal(t, urnC, old.URN)
-			assert.Equal(t, oldResC, old)
+			if old.URN == urnC {
+				assert.Equal(t, oldResC, old)
+				urn, expectOuts = urnC, oldResC.Outputs
+			} else {
+				assert.Equal(t, urnP, old.URN)
+				assert.Equal(t, oldProv, old)
+				urn, expectOuts = urnP, resource.PropertyMap{}
+			}
 			new := s.New()
 			assert.NotNil(t, s.New())
-			assert.Equal(t, urnC, new.URN)
-			assert.Equal(t, newResC.Properties, new.Inputs)
-			state = new
-			urn, realID, expectOuts = urnC, true, oldResC.Outputs
+			if old.URN == urnC {
+				assert.Equal(t, newResC.Properties, new.Inputs)
+			} else {
+				assert.Equal(t, urnP, new.URN)
+				assert.Equal(t, newProv.Properties, new.Inputs)
+			}
+			state, realID = new, true
 		case *DeleteStep: // D is deleted
 			old := s.Old()
 			assert.NotNil(t, old)
@@ -330,7 +368,8 @@ func TestBasicCRUDPlan(t *testing.T) {
 	assert.Equal(t, 1, len(iter.Updates()))
 	assert.True(t, iter.Updates()[urnB])
 	assert.Equal(t, 0, len(iter.Replaces()))
-	assert.Equal(t, 1, len(iter.Sames()))
+	assert.Equal(t, 2, len(iter.Sames()))
+	assert.True(t, iter.Sames()[urnP])
 	assert.True(t, iter.Sames()[urnC])
 	assert.Equal(t, 1, len(iter.Deletes()))
 	assert.True(t, iter.Deletes()[urnD])
@@ -355,9 +394,10 @@ func (g *testRegEvent) Done(result *RegisterResult) {
 }
 
 type testProviderHost struct {
-	analyzer func(nm tokens.QName) (plugin.Analyzer, error)
-	provider func(pkg tokens.Package, version *semver.Version) (plugin.Provider, error)
-	langhost func(runtime string) (plugin.LanguageRuntime, error)
+	analyzer      func(nm tokens.QName) (plugin.Analyzer, error)
+	provider      func(pkg tokens.Package, version *semver.Version) (plugin.Provider, error)
+	closeProvider func(provider plugin.Provider) error
+	langhost      func(runtime string) (plugin.LanguageRuntime, error)
 }
 
 func (host *testProviderHost) SignalCancellation() error {
@@ -385,6 +425,9 @@ func (host *testProviderHost) Analyzer(nm tokens.QName) (plugin.Analyzer, error)
 func (host *testProviderHost) Provider(pkg tokens.Package, version *semver.Version) (plugin.Provider, error) {
 	return host.provider(pkg, version)
 }
+func (host *testProviderHost) CloseProvider(provider plugin.Provider) error {
+	return host.closeProvider(provider)
+}
 func (host *testProviderHost) LanguageRuntime(runtime string) (plugin.LanguageRuntime, error) {
 	return host.langhost(runtime)
 }
@@ -400,9 +443,11 @@ func (host *testProviderHost) GetRequiredPlugins(info plugin.ProgInfo,
 }
 
 type testProvider struct {
-	pkg    tokens.Package
-	config func(map[config.Key]string) error
-	check  func(resource.URN,
+	pkg         tokens.Package
+	checkConfig func(resource.PropertyMap, resource.PropertyMap) (resource.PropertyMap, []plugin.CheckFailure, error)
+	diffConfig  func(resource.PropertyMap, resource.PropertyMap) (plugin.DiffResult, error)
+	config      func(resource.PropertyMap) error
+	check       func(resource.URN,
 		resource.PropertyMap, resource.PropertyMap) (resource.PropertyMap, []plugin.CheckFailure, error)
 	create func(resource.URN, resource.PropertyMap) (resource.ID, resource.PropertyMap, resource.Status, error)
 	diff   func(resource.URN, resource.ID, resource.PropertyMap, resource.PropertyMap) (plugin.DiffResult, error)
@@ -422,8 +467,15 @@ func (prov *testProvider) Close() error {
 func (prov *testProvider) Pkg() tokens.Package {
 	return prov.pkg
 }
-func (prov *testProvider) Configure(vars map[config.Key]string) error {
-	return prov.config(vars)
+func (prov *testProvider) CheckConfig(olds,
+	news resource.PropertyMap) (resource.PropertyMap, []plugin.CheckFailure, error) {
+	return prov.checkConfig(olds, news)
+}
+func (prov *testProvider) DiffConfig(olds, news resource.PropertyMap) (plugin.DiffResult, error) {
+	return prov.diffConfig(olds, news)
+}
+func (prov *testProvider) Configure(inputs resource.PropertyMap) error {
+	return prov.config(inputs)
 }
 func (prov *testProvider) Check(urn resource.URN,
 	olds, news resource.PropertyMap, _ bool) (resource.PropertyMap, []plugin.CheckFailure, error) {
