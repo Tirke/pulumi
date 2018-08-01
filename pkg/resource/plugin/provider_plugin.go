@@ -116,6 +116,7 @@ func (p *provider) getClient() (pulumirpc.ResourceProviderClient, error) {
 	}
 	return p.clientRaw, nil
 }
+
 // ensureConfigured blocks waiting for the plugin to be configured.  To improve parallelism, all Configure RPCs
 // occur in parallel, and we await the completion of them at the last possible moment.  This does mean, however, that
 // we might discover failures later than we would have otherwise, but the caller of ensureConfigured will get them.
