@@ -81,7 +81,7 @@ func addDefaultProviders(target *Target, source Source, prev *Snapshot) error {
 			}
 
 			urn, id := defaultProviderURN(target, source, pkg), resource.ID(uuid.NewV4().String())
-			ref, err := providers.NewReference(urn, id)
+			ref, err = providers.NewReference(urn, id)
 			contract.Assert(err == nil)
 
 			provider := &resource.State{
@@ -192,11 +192,7 @@ func (p *Plan) generateURN(g *resource.Goal) resource.URN {
 	return resource.NewURN(p.Target().Name, p.source.Project(), parentType, g.Type, g.Name)
 }
 
+// defaultProviderURN generates the URN for the global provider given a package.
 func defaultProviderURN(target *Target, source Source, pkg tokens.Package) resource.URN {
 	return resource.NewURN(target.Name, source.Project(), "", providers.MakeProviderType(pkg), "default")
-}
-
-// defaultProviderURN generates the URN for the global provider given a package.
-func (p *Plan) defaultProviderURN(pkg tokens.Package) resource.URN {
-	return defaultProviderURN(p.Target(), p.source, pkg)
 }

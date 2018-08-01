@@ -62,7 +62,7 @@ func NewEvalSource(plugctx *plugin.Context, runinfo *EvalRunInfo,
 type evalSource struct {
 	plugctx                 *plugin.Context                    // the plugin context.
 	runinfo                 *EvalRunInfo                       // the directives to use when running the program.
-	defaultProviderVersions map[tokens.Package]*semver.Version // the default provider verisons for this source.
+	defaultProviderVersions map[tokens.Package]*semver.Version // the default provider versions for this source.
 	dryRun                  bool                               // true if this is a dry-run operation only.
 }
 
@@ -275,7 +275,7 @@ func (d *defaultProviders) serve() {
 		}
 		req.response <- defaultProviderResponse{ref: ref}
 
-		logging.V(5).Infof("handled default provider request for pacakge %s: %s", req.pkg, ref)
+		logging.V(5).Infof("handled default provider request for package %s: %s", req.pkg, ref)
 	}
 }
 
@@ -512,7 +512,8 @@ func (rm *resmon) RegisterResource(ctx context.Context,
 	}
 
 	logging.V(5).Infof(
-		"ResourceMonitor.RegisterResource received: t=%v, name=%v, custom=%v, #props=%v, parent=%v, protect=%v, provider=%v, deps=%v",
+		"ResourceMonitor.RegisterResource received: t=%v, name=%v, custom=%v, #props=%v, parent=%v, protect=%v, "+
+			"provider=%v, deps=%v",
 		t, name, custom, len(props), parent, protect, provider, dependencies)
 
 	// Send the goal state to the engine.

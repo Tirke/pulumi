@@ -80,9 +80,10 @@ func (sg *stepGenerator) GenerateSteps(event RegisterResourceEvent) ([]Step, err
 			prov = sg.plan.providers
 		} else {
 			contract.Assert(goal.Provider != "")
-			ref, err := providers.ParseReference(goal.Provider)
-			if err != nil {
-				return nil, errors.Errorf("bad provider reference '%v' for resource '%v'", goal.Provider, urn)
+			ref, refErr := providers.ParseReference(goal.Provider)
+			if refErr != nil {
+				return nil, errors.Errorf(
+					"bad provider reference '%v' for resource '%v': %v", goal.Provider, urn, refErr)
 			}
 			p, ok := sg.plan.GetProvider(ref)
 			if !ok {
@@ -192,10 +193,10 @@ func (sg *stepGenerator) GenerateSteps(event RegisterResourceEvent) ([]Step, err
 			diff = plugin.DiffResult{Changes: plugin.DiffSome, ReplaceKeys: []resource.PropertyKey{"provider"}}
 		} else {
 			// Determine whether the change resulted in a diff.
-			d, err := sg.diff(urn, old.ID, oldInputs, oldOutputs, inputs, outputs, props, prov, refresh,
+			d, diffErr := sg.diff(urn, old.ID, oldInputs, oldOutputs, inputs, outputs, props, prov, refresh,
 				allowUnknowns)
-			if err != nil {
-				return nil, err
+			if diffErr != nil {
+				return nil, diffErr
 			}
 			diff = d
 		}

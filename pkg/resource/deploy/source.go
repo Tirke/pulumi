@@ -99,6 +99,7 @@ type registerDefaultProviderEvent struct {
 
 var _ RegisterResourceEvent = (*registerDefaultProviderEvent)(nil)
 
+// nolint: interfacer
 func newRegisterDefaultProviderEvent(pkg tokens.Package, cfg map[config.Key]string,
 	version *semver.Version, done chan<- *RegisterResult) *registerDefaultProviderEvent {
 

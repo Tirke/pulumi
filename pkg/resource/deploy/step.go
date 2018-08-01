@@ -496,11 +496,11 @@ func getProvider(s Step) (plugin.Provider, error) {
 	}
 	ref, err := providers.ParseReference(s.Provider())
 	if err != nil {
-		return nil, errors.Errorf("bad provider reference '%v' for resource %v: %v", s.Provider, s.URN(), err)
+		return nil, errors.Errorf("bad provider reference '%v' for resource %v: %v", s.Provider(), s.URN(), err)
 	}
 	provider, ok := s.Plan().GetProvider(ref)
 	if !ok {
-		return nil, errors.Errorf("unknown provider '%v' for resource %v", s.Provider, s.URN())
+		return nil, errors.Errorf("unknown provider '%v' for resource %v", s.Provider(), s.URN())
 	}
 	return provider, nil
 }
