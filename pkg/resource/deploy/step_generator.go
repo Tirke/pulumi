@@ -187,11 +187,17 @@ func (sg *stepGenerator) GenerateSteps(event RegisterResourceEvent) ([]Step, err
 	if hasOld {
 		contract.Assert(old != nil && old.Type == new.Type)
 
-		// Determine whether the change resulted in a diff.
-		diff, err := sg.diff(urn, old.ID, oldInputs, oldOutputs, inputs, outputs, props, prov, refresh,
-			allowUnknowns)
-		if err != nil {
-			return nil, err
+		var diff plugin.DiffResult
+		if old.Provider != new.Provider {
+			diff = plugin.DiffResult{Changes: plugin.DiffSome, ReplaceKeys: []resource.PropertyKey{"provider"}}
+		} else {
+			// Determine whether the change resulted in a diff.
+			d, err := sg.diff(urn, old.ID, oldInputs, oldOutputs, inputs, outputs, props, prov, refresh,
+				allowUnknowns)
+			if err != nil {
+				return nil, err
+			}
+			diff = d
 		}
 
 		// Ensure that we received a sensible response.
